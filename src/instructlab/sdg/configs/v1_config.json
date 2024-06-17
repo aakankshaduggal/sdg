@@ -1,0 +1,23 @@
+{
+    "pipeline_steps": {
+        "step1": {
+            "config_file": "gen_c.yaml",
+            "start_tag": "start_of_c",
+            "end_tag": "end_of_c",
+            "num_samples": 30
+        },
+        "step2": {
+            "config_file": "gen_q.yaml",
+            "start_tag": "start_of_q",
+            "end_tag": "end_of_q",
+            "num_samples": 30
+        },
+        "step3": {
+            "config_file": "filter_q.yaml",
+            "start_tag": "start_of_q",
+            "end_tag": "end_of_q",
+            "num_samples": 30
+        }
+    }
+}
+
