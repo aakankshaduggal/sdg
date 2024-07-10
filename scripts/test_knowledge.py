@@ -7,7 +7,7 @@ from openai import OpenAI
 
 # First Party
 from src.instructlab.sdg import SDG
-from src.instructlab.sdg.default_flows import Flow, DEFAULT_FLOW_FILE_MAP
+from src.instructlab.sdg.default_flows import DEFAULT_FLOW_FILE_MAP, Flow
 from src.instructlab.sdg.pipeline import Pipeline
 
 # Please don't add you vLLM endpoint key here
@@ -38,9 +38,7 @@ samples = [
 
 ds = Dataset.from_list(samples)
 
-mmlu_flow = Flow(client, 1).get_flow_from_file(
-    DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]
-)
+mmlu_flow = Flow(client, 1).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"])
 knowledge_flow = Flow(client, 1).get_flow_from_file(
     DEFAULT_FLOW_FILE_MAP["SynthKnowledgeFlow"]
 )

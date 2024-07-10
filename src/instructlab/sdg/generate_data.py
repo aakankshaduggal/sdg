@@ -18,10 +18,10 @@ import openai
 # pylint: disable=ungrouped-imports
 from instructlab.sdg import SDG, utils
 from instructlab.sdg.default_flows import (
+    DEFAULT_FLOW_FILE_MAP,
     MODEL_FAMILY_MERLINITE,
     MODEL_FAMILY_MIXTRAL,
     Flow,
-    DEFAULT_FLOW_FILE_MAP,
 )
 from instructlab.sdg.pipeline import Pipeline
 from instructlab.sdg.utils import models
@@ -127,14 +127,10 @@ def _sdg_init(pipeline, client, num_instructions_to_generate):
     grounded_skill_flows = []
     if pipeline == "full":
         knowledge_flows.append(
-            Flow(client).get_flow_from_file(
-                DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]
-            )
+            Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"])
         )
         knowledge_flows.append(
-            Flow(client).get_flow_from_file(
-                DEFAULT_FLOW_FILE_MAP["SynthKnowledgeFlow"]
-            )
+            Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["SynthKnowledgeFlow"])
         )
         freeform_skill_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(

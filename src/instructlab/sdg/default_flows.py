@@ -5,6 +5,8 @@ from importlib import resources
 from typing import Any, Optional
 import operator
 import os
+
+# Third Party
 import yaml
 
 # Local
@@ -29,6 +31,7 @@ def _get_model_prompt(model_family):
         raise ValueError(f"Unknown model family: {model_family}")
     return _MODEL_PROMPTS[model_family]
 
+
 BLOCK_TYPE_MAP = {
     "LLMBlock": LLMBlock,
     "FilterByValueBlock": FilterByValueBlock,
@@ -47,6 +50,7 @@ OPERATOR_MAP = {
 CONVERT_DTYPE_MAP = {
     "float": float,
 }
+
 
 class Flow(ABC):
     def __init__(
@@ -69,7 +73,9 @@ class Flow(ABC):
                     self.sdg_base, block["block_config"]["config_path"]
                 )
                 if os.path.isfile(block_config_path_relative_to_sdg_base):
-                    block["block_config"]["config_path"] = block_config_path_relative_to_sdg_base
+                    block["block_config"]["config_path"] = (
+                        block_config_path_relative_to_sdg_base
+                    )
             if "model_id" in block["block_config"]:
                 block["block_config"]["client"] = self.client
                 model_id = block["block_config"]["model_id"]
@@ -79,14 +85,19 @@ class Flow(ABC):
                     model_family = MODEL_FAMILY_MAP[model_id]
                 block["block_config"]["model_prompt"] = _get_model_prompt(model_family)
             if "operation" in block["block_config"]:
-                block["block_config"]["operation"] = OPERATOR_MAP[block["block_config"]["operation"]]
+                block["block_config"]["operation"] = OPERATOR_MAP[
+                    block["block_config"]["operation"]
+                ]
             if "convert_dtype" in block["block_config"]:
-                block["block_config"]["convert_dtype"] = CONVERT_DTYPE_MAP[block["block_config"]["convert_dtype"]]
+                block["block_config"]["convert_dtype"] = CONVERT_DTYPE_MAP[
+                    block["block_config"]["convert_dtype"]
+                ]
             n = self.num_instructions_to_generate
             if n is not None:
                 if "gen_kwargs" in block:
                     block["gen_kwargs"]["n"] = n
         return flow
+
 
 DEFAULT_FLOW_FILE_MAP = {
     "SimpleKnowledgeFlow": "flows/simple_knowledge.yaml",
