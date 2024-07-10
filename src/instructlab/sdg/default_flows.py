@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from importlib import resources
 import operator
 import os
+import yaml
 
 # Local
 from .filterblock import FilterByValueBlock
@@ -27,22 +28,72 @@ def _get_model_prompt(model_family):
         raise ValueError(f"Unknown model family: {model_family}")
     return _MODEL_PROMPTS[model_family]
 
+BLOCK_TYPE_MAP = {
+    "LLMBlock": LLMBlock,
+    "FilterByValueBlock": FilterByValueBlock,
+    "CombineColumnsBlock": CombineColumnsBlock,
+}
+
+MODEL_FAMILY_MAP = {
+    "Mixtral-8x7B-Instruct-v0.1": MODEL_FAMILY_MIXTRAL,
+}
+
+OPERATOR_MAP = {
+    "operator.eq": operator.eq,
+    "operator.ge": operator.ge,
+}
+
+CONVERT_DTYPE_MAP = {
+    "float": float,
+}
 
 class Flow(ABC):
     def __init__(
         self, client, model_family, model_id, num_instructions_to_generate
     ) -> None:
         self.client = client
+        # TODO make the rest of pass-in parameters optional
         self.model_family = model_family
         self.model_id = model_id
         self.num_instructions_to_generate = num_instructions_to_generate
         self.sdg_base = resources.files(__package__)
-
-    @abstractmethod
+    
+    # TODO: remove this method when all subclasses are removed
+    # @abstractmethod
     def get_flow(self) -> list:
         pass
 
+    def get_flow_from_file(self, yaml_path: str) -> list:
+        yaml_path_relative_to_sdg_base = os.path.join(self.sdg_base, yaml_path)
+        if os.path.isfile(yaml_path_relative_to_sdg_base):
+            yaml_path = yaml_path_relative_to_sdg_base
+        with open(yaml_path, "r", encoding="utf-8") as yaml_file:
+            flow = yaml.safe_load(yaml_file)
+        for block in flow:
+            block["block_type"] = BLOCK_TYPE_MAP[block["block_type"]]
+            if "config_path" in block["block_config"]:
+                block_config_path_relative_to_sdg_base = os.path.join(
+                    self.sdg_base, block["block_config"]["config_path"]
+                )
+                if os.path.isfile(block_config_path_relative_to_sdg_base):
+                    block["block_config"]["config_path"] = block_config_path_relative_to_sdg_base
+            # TODO override block_config with the passed-in parameters if not None
+            if "model_id" in block["block_config"]:
+                block["block_config"]["client"] = self.client
+                model_id = block["block_config"]["model_id"]
+                model_family = MODEL_FAMILY_MAP[model_id]
+                block["block_config"]["model_prompt"] = _get_model_prompt(model_family)
+            if "operation" in block["block_config"]:
+                block["block_config"]["operation"] = OPERATOR_MAP[block["block_config"]["operation"]]
+            if "convert_dtype" in block["block_config"]:
+                block["block_config"]["convert_dtype"] = CONVERT_DTYPE_MAP[block["block_config"]["convert_dtype"]]
+            n = self.num_instructions_to_generate
+            if n is not None:
+                if "gen_kwargs" in block:
+                    block["gen_kwargs"]["n"] = n
+        return flow
 
+# TODO: remove _SimpleFlow and use Flow directly
 class _SimpleFlow(Flow):
     def get_flow(self) -> list:
         return [
@@ -57,8 +108,8 @@ class _SimpleFlow(Flow):
                     "output_cols": ["output"],
                 },
                 "gen_kwargs": {
-                    "max_tokens": 2048,
                     "temperature": 0.7,
+                    "max_tokens": 2048,
                     "n": self.num_instructions_to_generate,
                 },
                 "drop_duplicates": ["output"],
@@ -82,7 +133,6 @@ class SimpleFreeformSkillFlow(_SimpleFlow):
         flow[0]["block_config"]["config_path"] = os.path.join(
             self.sdg_base, "configs/skills/simple_generate_qa_freeform.yaml"
         )
-        flow[0]["block_config"]["block_name"] = "gen_skill_freeform"
         flow[0]["block_config"]["block_name"] = "gen_skill_freeform"
         return flow
 
