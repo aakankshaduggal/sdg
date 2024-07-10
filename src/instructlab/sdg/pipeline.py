@@ -43,6 +43,7 @@ class Pipeline:
             block = block_type(**block_config)
 
             logger.info("------------------------------------\n")
+
             logger.info("Running block: %s", block_config["block_name"])
             logger.info("Input dataset: %s", dataset)
 
