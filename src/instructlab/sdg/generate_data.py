@@ -20,13 +20,7 @@ from instructlab.sdg import SDG, utils
 from instructlab.sdg.default_flows import (
     MODEL_FAMILY_MERLINITE,
     MODEL_FAMILY_MIXTRAL,
-    MMLUBenchFlow,
-    SimpleFreeformSkillFlow,
-    SimpleGroundedSkillFlow,
-    SimpleKnowledgeFlow,
-    SynthGroundedSkillsFlow,
-    SynthKnowledgeFlow,
-    SynthSkillsFlow,
+    Flow,
 )
 from instructlab.sdg.pipeline import Pipeline
 from instructlab.sdg.utils import models
@@ -127,51 +121,52 @@ def _gen_test_data(
 
 
 def _sdg_init(pipeline, client, model_family, model_name, num_instructions_to_generate):
-    knowledge_flow_types = []
-    freeform_skill_flow_types = []
-    grounded_skill_flow_types = []
+    knowledge_flows = []
+    freeform_skill_flows = []
+    grounded_skill_flows = []
     if pipeline == "full":
-        knowledge_flow_types.append(MMLUBenchFlow)
-        knowledge_flow_types.append(SynthKnowledgeFlow)
-        freeform_skill_flow_types.append(SynthSkillsFlow)
-        grounded_skill_flow_types.append(SynthGroundedSkillsFlow)
+        knowledge_flows.append(
+            Flow(client).get_flow_from_file(
+                "flows/mmlu_bench.yaml"
+            )
+        )
+        knowledge_flows.append(
+            Flow(client).get_flow_from_file(
+                "flows/synth_knowledge.yaml"
+            )
+        )
+        freeform_skill_flows.append(
+            Flow(client, num_instructions_to_generate).get_flow_from_file(
+                "flows/synth_skills.yaml"
+            )
+        )
+        grounded_skill_flows.append(
+            Flow(client, num_instructions_to_generate).get_flow_from_file(
+                "flows/synth_grounded_skills.yaml"
+            )
+        )
     elif pipeline == "simple":
-        knowledge_flow_types.append(SimpleKnowledgeFlow)
-        freeform_skill_flow_types.append(SimpleFreeformSkillFlow)
-        grounded_skill_flow_types.append(SimpleGroundedSkillFlow)
+        knowledge_flows.append(
+            Flow(client, num_instructions_to_generate).get_flow_from_file(
+                "flows/simple_knowledge.yaml"
+            )
+        )
+        freeform_skill_flows.append(
+            Flow(client, num_instructions_to_generate).get_flow_from_file(
+                "flows/simple_freeform_skill.yaml"
+            )
+        )
+        grounded_skill_flows.append(
+            Flow(client, num_instructions_to_generate).get_flow_from_file(
+                "flows/simple_grounded_skill.yaml"
+            )
+        )
     else:
         raise utils.GenerateException(f"Error: pipeline ({pipeline}) is not supported.")
 
-    sdg_knowledge = SDG(
-        [
-            Pipeline(
-                flow_type(
-                    client, model_family, model_name, num_instructions_to_generate
-                ).get_flow()
-            )
-            for flow_type in knowledge_flow_types
-        ]
-    )
-    sdg_freeform_skill = SDG(
-        [
-            Pipeline(
-                flow_type(
-                    client, model_family, model_name, num_instructions_to_generate
-                ).get_flow()
-            )
-            for flow_type in freeform_skill_flow_types
-        ]
-    )
-    sdg_grounded_skill = SDG(
-        [
-            Pipeline(
-                flow_type(
-                    client, model_family, model_name, num_instructions_to_generate
-                ).get_flow()
-            )
-            for flow_type in grounded_skill_flow_types
-        ]
-    )
+    sdg_knowledge = SDG([Pipeline(flow) for flow in knowledge_flows])
+    sdg_freeform_skill = SDG([Pipeline(flow) for flow in freeform_skill_flows])
+    sdg_grounded_skill = SDG([Pipeline(flow) for flow in grounded_skill_flows])
     return sdg_knowledge, sdg_freeform_skill, sdg_grounded_skill
 
 
