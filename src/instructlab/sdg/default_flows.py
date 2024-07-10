@@ -87,3 +87,13 @@ class Flow(ABC):
                 if "gen_kwargs" in block:
                     block["gen_kwargs"]["n"] = n
         return flow
+
+DEFAULT_FLOW_FILE_MAP = {
+    "SimpleKnowledgeFlow": "flows/simple_knowledge.yaml",
+    "SimpleFreeformSkillFlow": "flows/simple_freeform_skill.yaml",
+    "SimpleGroundedSkillFlow": "flows/simple_grounded_skill.yaml",
+    "MMLUBenchFlow": "flows/mmlu_bench.yaml",
+    "SynthKnowledgeFlow": "flows/synth_knowledge.yaml",
+    "SynthSkillsFlow": "flows/synth_skills.yaml",
+    "SynthGroundedSkillsFlow": "flows/synth_grounded_skills.yaml",
+}

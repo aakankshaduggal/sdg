@@ -4,7 +4,7 @@ from openai import OpenAI
 
 # First Party
 from src.instructlab.sdg import SDG
-from src.instructlab.sdg.default_flows import Flow
+from src.instructlab.sdg.default_flows import Flow, DEFAULT_FLOW_FILE_MAP
 from src.instructlab.sdg.pipeline import Pipeline
 
 # for vLLM endpoints, the api_key remains "EMPTY"
@@ -98,7 +98,7 @@ samples = [
 ds = Dataset.from_list(samples)
 
 skills_flow = Flow(client, 10).get_flow_from_file(
-    "flows/synth_grounded_skills.yaml"
+    DEFAULT_FLOW_FILE_MAP["SynthGroundedSkillsFlow"]
 )
 skills_pipe = Pipeline(skills_flow)
 

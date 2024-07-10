@@ -21,6 +21,7 @@ from instructlab.sdg.default_flows import (
     MODEL_FAMILY_MERLINITE,
     MODEL_FAMILY_MIXTRAL,
     Flow,
+    DEFAULT_FLOW_FILE_MAP,
 )
 from instructlab.sdg.pipeline import Pipeline
 from instructlab.sdg.utils import models
@@ -127,38 +128,38 @@ def _sdg_init(pipeline, client, model_family, model_name, num_instructions_to_ge
     if pipeline == "full":
         knowledge_flows.append(
             Flow(client).get_flow_from_file(
-                "flows/mmlu_bench.yaml"
+                DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]
             )
         )
         knowledge_flows.append(
             Flow(client).get_flow_from_file(
-                "flows/synth_knowledge.yaml"
+                DEFAULT_FLOW_FILE_MAP["SynthKnowledgeFlow"]
             )
         )
         freeform_skill_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(
-                "flows/synth_skills.yaml"
+                DEFAULT_FLOW_FILE_MAP["SynthSkillsFlow"]
             )
         )
         grounded_skill_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(
-                "flows/synth_grounded_skills.yaml"
+                DEFAULT_FLOW_FILE_MAP["SynthGroundedSkillsFlow"]
             )
         )
     elif pipeline == "simple":
         knowledge_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(
-                "flows/simple_knowledge.yaml"
+                DEFAULT_FLOW_FILE_MAP["SimpleKnowledgeFlow"]
             )
         )
         freeform_skill_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(
-                "flows/simple_freeform_skill.yaml"
+                DEFAULT_FLOW_FILE_MAP["SimpleFreeformSkillFlow"]
             )
         )
         grounded_skill_flows.append(
             Flow(client, num_instructions_to_generate).get_flow_from_file(
-                "flows/simple_grounded_skill.yaml"
+                DEFAULT_FLOW_FILE_MAP["SimpleGroundedSkillFlow"]
             )
         )
     else:
