@@ -121,7 +121,7 @@ def _gen_test_data(
             outfile.write("\n")
 
 
-def _sdg_init(pipeline, client, model_family, model_name, num_instructions_to_generate):
+def _sdg_init(pipeline, client, num_instructions_to_generate):
     knowledge_flows = []
     freeform_skill_flows = []
     grounded_skill_flows = []
@@ -246,8 +246,6 @@ def generate_data(
     sdg_knowledge, sdg_freeform_skill, sdg_grounded_skill = _sdg_init(
         pipeline,
         client,
-        model_family,
-        model_name,
         num_instructions_to_generate,
     )
 
