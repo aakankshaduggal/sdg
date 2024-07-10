@@ -31,7 +31,6 @@ def _get_model_prompt(model_family):
         raise ValueError(f"Unknown model family: {model_family}")
     return _MODEL_PROMPTS[model_family]
 
-
 BLOCK_TYPE_MAP = {
     "LLMBlock": LLMBlock,
     "FilterByValueBlock": FilterByValueBlock,
@@ -50,6 +49,7 @@ OPERATOR_MAP = {
 CONVERT_DTYPE_MAP = {
     "float": float,
 }
+
 
 
 class Flow(ABC):
