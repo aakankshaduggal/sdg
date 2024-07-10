@@ -159,6 +159,11 @@ def _sdg_init(pipeline, client, num_instructions_to_generate):
                 DEFAULT_FLOW_FILE_MAP["SimpleGroundedSkillFlow"]
             )
         )
+    elif os.path.isfile(pipeline):
+        flow = Flow(client, num_instructions_to_generate).get_flow_from_file(pipeline)
+        knowledge_flows = [flow]
+        freeform_skill_flows = [flow]
+        grounded_skill_flows = [flow]
     else:
         raise utils.GenerateException(f"Error: pipeline ({pipeline}) is not supported.")
 

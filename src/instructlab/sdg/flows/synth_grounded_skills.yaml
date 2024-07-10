@@ -2,7 +2,7 @@
   block_config:
     block_name: gen_contexts
     config_path: configs/skills/contexts.yaml
-    model_id: Mixtral-8x7B-Instruct-v0.1
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
     output_cols:
       - context
   gen_kwargs:
@@ -15,7 +15,7 @@
   block_config:
     block_name: gen_grounded_questions
     config_path: configs/skills/grounded_questions.yaml
-    model_id: Mixtral-8x7B-Instruct-v0.1
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
     output_cols:
       - question
     batch_kwargs:
@@ -26,7 +26,7 @@
   block_config:
     block_name: eval_grounded_questions
     config_path: configs/skills/evaluate_grounded_questions.yaml
-    model_id: Mixtral-8x7B-Instruct-v0.1
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
     output_cols:
       - evaluation
       - score
@@ -47,14 +47,14 @@
   block_config:
     block_name: gen_grounded_responses
     config_path: configs/skills/grounded_responses.yaml
-    model_id: Mixtral-8x7B-Instruct-v0.1
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
     output_cols:
       - response
 - block_type: LLMBlock
   block_config:
     block_name: evaluate_grounded_qa_pair
     config_path: configs/skills/evaluate_grounded_pair.yaml
-    model_id: Mixtral-8x7B-Instruct-v0.1
+    model_id: mistralai/Mixtral-8x7B-Instruct-v0.1
     output_cols:
       - evaluation
       - score
