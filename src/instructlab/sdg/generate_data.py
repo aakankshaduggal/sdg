@@ -145,7 +145,7 @@ def _sdg_init(pipeline, client, num_instructions_to_generate):
         )
     elif pipeline == "simple":
         knowledge_flows.append(
-            Flow(client, num_instructions_to_generate).get_flow_from_file(
+            Flow(client).get_flow_from_file(
                 DEFAULT_FLOW_FILE_MAP["SimpleKnowledgeFlow"]
             )
         )

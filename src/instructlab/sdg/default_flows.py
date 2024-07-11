@@ -94,7 +94,7 @@ class Flow(ABC):
                 ]
             n = self.num_instructions_to_generate
             if n is not None:
-                if "gen_kwargs" in block:
+                if "gen_kwargs" in block and block["gen_kwargs"]["n"] is not None:
                     block["gen_kwargs"]["n"] = n
         return flow
 
