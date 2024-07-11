@@ -39,7 +39,7 @@ BLOCK_TYPE_MAP = {
 }
 
 MODEL_FAMILY_MAP = {
-    "Mixtral-8x7B-Instruct-v0.1": MODEL_FAMILY_MIXTRAL,
+    "mistralai/Mixtral-8x7B-Instruct-v0.1": MODEL_FAMILY_MIXTRAL,
 }
 
 OPERATOR_MAP = {
