@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Standard
+import concurrent.futures
 from typing import Any, Dict
 import re
 
@@ -111,17 +112,73 @@ class LLMBlock(Block):
     def _format_prompt(self, sample: Dict) -> str:
         return self.prompt_template.format(**sample).strip()
 
+    def process_batch(self, start, end, samples, model_prompt, client, generate_args):
+        try:
+            batched_prompts = [
+                model_prompt.format(prompt=self._format_prompt(sample))
+                for sample in samples[start:end]
+            ]
+            response = client.completions.create(
+                prompt=batched_prompts, **generate_args
+            )
+            return [choice.text.strip() for choice in response.choices]
+        except Exception as e:
+            logger.warning(f"Error processing batch from {start} to {end}: {e}")
+            return []
+
     def _generate(self, samples, **gen_kwargs) -> list:
+        generate_args = {**self.defaults, **gen_kwargs}
+
+        if self.server_supports_batched:
+            batch_size = 64  # TODO: get this to config
+            concurrency = 16  # TODO: get this to config
+            num_samples = len(samples)
+            num_batches = (
+                num_samples + batch_size - 1
+            ) // batch_size  # Calculate the number of batches
+
+            # Get the batch indices pairs as a list
+            batch_indices = [
+                (i * batch_size, min((i + 1) * batch_size, num_samples))
+                for i in range(num_batches)
+            ]
+
+            choices = []
+            threaded_samples_seq = []
+
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=concurrency
+            ) as executor:
+                future_to_batch = {
+                    executor.submit(
+                        self.process_batch,
+                        start,
+                        end,
+                        samples,
+                        self.model_prompt,
+                        self.client,
+                        generate_args,
+                    ): (start, end)
+                    for start, end in batch_indices
+                }
+
+                for future in concurrent.futures.as_completed(future_to_batch):
+                    start, end = future_to_batch[future]
+                    try:
+                        batch_choices = future.result()
+                        choices.extend(batch_choices)
+                        threaded_samples_seq.extend(samples[start:end])
+                    except Exception as e:
+                        logger.warning(
+                            f"Batch from {start} to {end} generated an exception: {e}"
+                        )
+
+            return choices, samples_batched_seq
+
         prompts = [
             self.model_prompt.format(prompt=self._format_prompt(sample))
             for sample in samples
         ]
-        generate_args = {**self.defaults, **gen_kwargs}
-
-        if self.server_supports_batched:
-            response = self.client.completions.create(prompt=prompts, **generate_args)
-            return [choice.text.strip() for choice in response.choices]
-
         n = gen_kwargs.get("n", 1)
         results = []
         for prompt in prompts:
@@ -164,7 +221,7 @@ class LLMBlock(Block):
 
         # generate the output
 
-        outputs = self._generate(samples, **gen_kwargs)
+        outputs, samples_batched_seq = self._generate(samples, **gen_kwargs)
         logger.debug("Generated outputs: %s", outputs)
 
         num_parallel_samples = gen_kwargs.get("n", 1)
@@ -173,7 +230,7 @@ class LLMBlock(Block):
         # Duplicate each input sample n times, where n is the number
         # of output sequences generated per input, so that we can
         # pair up the inputs and outputs.
-        for item in samples:
+        for item in samples_batched_seq:
             extended_samples.extend([item] * num_parallel_samples)
 
         new_data = []
