@@ -11,15 +11,19 @@ from ..logger_config import setup_logger
 LOGGER = setup_logger(__name__)
 
 
-def load_ds(path, sampling_ratio):
+def load_ds(path, sampling_ratio=None, num_samples=None):
     LOGGER.info(f"Loading dataset from {path} ...")
     dataset = load_dataset("json", data_files=path, split="train")
     LOGGER.info(f"Dataset columns: {dataset.column_names}")
     LOGGER.info(f"Dataset loaded with {len(dataset)} samples")
 
-    if sampling_ratio != 1.0:
+    if sampling_ratio is None and num_samples is None:
+        raise Exception  # TODO handle error
+
+    if sampling_ratio is not None:
         num_samples = int(len(dataset) * sampling_ratio)
-        dataset = adjust_train_sample_size(dataset, num_samples)
+
+    dataset = sample_dataset(dataset, num_samples)
 
     # check if metadata column is string if not convert it using json.dumps
     if not isinstance(dataset["metadata"][0], str):
@@ -44,7 +48,7 @@ def add_system_message(sample: dict, sys_prompt: str) -> dict:
     return sample
 
 
-def adjust_train_sample_size(ds: Dataset, num_samples: int):
+def sample_dataset(ds: Dataset, num_samples: int):
     LOGGER.info(f"Rebalancing dataset to have {num_samples} samples ...")
     df = ds.to_pandas()
     df = df.sample(n=num_samples, random_state=42, replace=True)
