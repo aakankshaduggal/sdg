@@ -68,3 +68,20 @@ class CombineColumnsBlock(Block):
     def generate(self, samples: Dataset) -> Dataset:
         samples = samples.map(self._generate, num_proc=self.num_procs)
         return samples
+
+
+class DuplicateColumns(Block):
+    def __init__(self, columns_map: dict) -> None:
+        """Create duplicate of columns specified in column map.
+
+        Args:
+            columns_map (dict): mapping of existing column to new column names
+        """
+        self.columns_map = columns_map
+        super().__init__(block_name=self.__class__.__name__)
+    
+    
+    def generate(self, samples: Dataset):
+        for col_to_dup in self.columns_map:
+            samples = samples.add_columns(self.columns_map[col_to_dup], samples[col_to_dup])
+        return samples
