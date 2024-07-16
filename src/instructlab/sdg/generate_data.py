@@ -221,6 +221,7 @@ def generate_data(
     logger,
     api_base,
     api_key: Optional[str] = None,
+    openai_timeout: Optional[int] = 3600,
     model_family: Optional[str] = None,
     model_name: Optional[str] = None,
     # TODO - not used -- when batching is enabled, this is relevant.
@@ -278,6 +279,7 @@ def generate_data(
         base_url=api_base,
         api_key=api_key,
         http_client=httpx.Client(cert=cert, verify=verify),
+        timeout=openai_timeout
     )
 
     if models.get_model_family(model_family, model_name) == "mixtral":
