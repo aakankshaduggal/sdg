@@ -1,5 +1,5 @@
 datasets:
-  - path: <path_to_dataset>
+  - path: instructlab/InstructLabCommunity
     sampling_size: 1.0
 
 sys_prompt: |
