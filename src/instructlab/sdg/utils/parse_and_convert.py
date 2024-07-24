@@ -172,18 +172,18 @@ def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
     def __pick_documents(rec, p):
         answer_document = [rec["context"]]
         selected_docs = [e for e in all_context if e != answer_document]
-        if len(selected_docs) > 1:
-            if len(selected_docs) < p:
-                print(f"Number of unique document is {len(selected_docs)} which is less than {p}. Using all the documents in the RAFT context")
+        if len(selected_docs) > 0:
+            if len(selected_docs) < num_doc_in_context:
+                print(f"Number of unique document is {len(selected_docs)} which is less than {num_doc_in_context}. Using all the documents in the RAFT context")
             if random.uniform(0, 1) < p:
                  # golden/answer + distractor documents
-                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= p else selected_docs + [answer_document]
+                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs + [answer_document]
             else:
                 # distractor documents
-                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= p else selected_docs
+                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs
         else:
             print("Only 1 unique document found. Turning off RAFT styling")
-            docs = selected_docs
+            docs = [answer_document]
         random.shuffle(docs)
         docs = "\n".join(([f"Document:\n{e}\n\n" for idx, e in enumerate(docs)]))
         user_idx, user_msg = [(idx, rec_msg) for idx, rec_msg in enumerate(rec["messages"]) if rec_msg["role"] == "user"][0]
