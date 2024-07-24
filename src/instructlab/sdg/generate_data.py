@@ -46,7 +46,7 @@ logger = setup_logger(__name__)
 NUM_SYNTH_SKILLS = 30
 
 
-def _sdg_init(pipeline, client, num_instructions_to_generate):
+def _sdg_init(pipeline, client, num_instructions_to_generate, num_workers=1, batch_size=8, save_freq=2):
     knowledge_flows = []
     freeform_skill_flows = []
     grounded_skill_flows = []
@@ -89,10 +89,10 @@ def _sdg_init(pipeline, client, num_instructions_to_generate):
     else:
         raise utils.GenerateException(f"Error: pipeline ({pipeline}) is not supported.")
 
-    sdg_knowledge = SDG([Pipeline(flow) for flow in knowledge_flows])
-    sdg_freeform_skill = SDG([Pipeline(flow) for flow in freeform_skill_flows])
-    sdg_grounded_skill = SDG([Pipeline(flow) for flow in grounded_skill_flows])
-    sdg_mmlubench = SDG([Pipeline(Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]))])
+    sdg_knowledge = SDG([Pipeline(flow) for flow in knowledge_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
+    sdg_freeform_skill = SDG([Pipeline(flow) for flow in freeform_skill_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
+    sdg_grounded_skill = SDG([Pipeline(flow) for flow in grounded_skill_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
+    sdg_mmlubench = SDG([Pipeline(Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]))], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
                         
     return sdg_knowledge, sdg_mmlubench, sdg_freeform_skill, sdg_grounded_skill
 
@@ -206,6 +206,9 @@ def generate_data(
         pipeline,
         client,
         num_instructions_to_generate,
+        num_workers=1,
+        batch_size=1,
+        save_freq=2
     )
 
     if console_output:
@@ -240,7 +243,7 @@ def generate_data(
             # add to 1.0 recipe
         
 
-        generated_data = sdg.generate(ds, cache_dataset_path=f"~/tmp/cache_{leaf_node_path}.jsonl")
+        generated_data = sdg.generate(ds, checkpoint_dir=os.path.join(output_dir, f"checkpoints_{date_suffix}/{leaf_node_path}"))
 
         if is_knowledge:
             knowledge_phase_data = create_phase07_ds(generated_data)
