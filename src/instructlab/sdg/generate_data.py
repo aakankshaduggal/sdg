@@ -2,15 +2,14 @@
 
 # Standard
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
 from typing import Optional
-import json
 import os
 import time
+
 # Third Party
 # instructlab - All of these need to go away (other than sdg) - issue #6
-from datasets import Dataset, concatenate_datasets
+from datasets import Dataset
 import httpx
 import openai
 
@@ -28,13 +27,12 @@ from instructlab.sdg.pipeline import Pipeline
 from instructlab.sdg.utils import models
 from instructlab.sdg.utils.datamixing import Recipe
 from instructlab.sdg.utils.parse_and_convert import (
-    _convert_to_hack_fmt,
     _convert_to_messages,
     _unescape,
-    create_phase07_ds,
-    create_phase10_ds,
     create_mmlu_evaluation_dataset,
-    create_mmlu_evaluation_yaml
+    create_mmlu_evaluation_yaml,
+    create_knowledge_pretraining_ds,
+    create_knowledge_regular_ds,
 )
 from instructlab.sdg.utils.taxonomy import (
     leaf_node_to_samples,
@@ -46,7 +44,14 @@ logger = setup_logger(__name__)
 NUM_SYNTH_SKILLS = 30
 
 
-def _sdg_init(pipeline, client, num_instructions_to_generate, num_workers=1, batch_size=8, save_freq=2):
+def _sdg_init(
+    pipeline,
+    client,
+    num_instructions_to_generate,
+    num_workers=1,
+    batch_size=8,
+    save_freq=2,
+):
     knowledge_flows = []
     freeform_skill_flows = []
     grounded_skill_flows = []
@@ -89,11 +94,35 @@ def _sdg_init(pipeline, client, num_instructions_to_generate, num_workers=1, bat
     else:
         raise utils.GenerateException(f"Error: pipeline ({pipeline}) is not supported.")
 
-    sdg_knowledge = SDG([Pipeline(flow) for flow in knowledge_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
-    sdg_freeform_skill = SDG([Pipeline(flow) for flow in freeform_skill_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
-    sdg_grounded_skill = SDG([Pipeline(flow) for flow in grounded_skill_flows], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
-    sdg_mmlubench = SDG([Pipeline(Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"]))], num_workers=num_workers, batch_size=batch_size, save_freq=save_freq)
-                        
+    sdg_knowledge = SDG(
+        [Pipeline(flow) for flow in knowledge_flows],
+        num_workers=num_workers,
+        batch_size=batch_size,
+        save_freq=save_freq,
+    )
+    sdg_freeform_skill = SDG(
+        [Pipeline(flow) for flow in freeform_skill_flows],
+        num_workers=num_workers,
+        batch_size=batch_size,
+        save_freq=save_freq,
+    )
+    sdg_grounded_skill = SDG(
+        [Pipeline(flow) for flow in grounded_skill_flows],
+        num_workers=num_workers,
+        batch_size=batch_size,
+        save_freq=save_freq,
+    )
+    sdg_mmlubench = SDG(
+        [
+            Pipeline(
+                Flow(client).get_flow_from_file(DEFAULT_FLOW_FILE_MAP["MMLUBenchFlow"])
+            )
+        ],
+        num_workers=num_workers,
+        batch_size=batch_size,
+        save_freq=save_freq,
+    )
+
     return sdg_knowledge, sdg_mmlubench, sdg_freeform_skill, sdg_grounded_skill
 
 
@@ -153,12 +182,18 @@ def generate_data(
     logger = setup_logger(__name__)
     generate_start = time.time()
 
-    knowledge_recipe = Recipe("src/instructlab/sdg/configs/knowledge/data_recipe/default_recipe.yaml")
-    skills_recipe = Recipe("src/instructlab/sdg/configs/skills/data_recipe/default_recipe.yaml")
+    knowledge_recipe = Recipe(
+        "src/instructlab/sdg/configs/knowledge/data_recipe/default_recipe.yaml"
+    )
+    skills_recipe = Recipe(
+        "src/instructlab/sdg/configs/skills/data_recipe/default_recipe.yaml"
+    )
 
-    sys_prompt = knowledge_recipe.sys_prompt    
+    sys_prompt = knowledge_recipe.sys_prompt
     logger.info(f"System prompt: {sys_prompt}")
-    assert sys_prompt == skills_recipe.sys_prompt, "System prompts must be the same for both knowledge and skills"
+    assert (
+        sys_prompt == skills_recipe.sys_prompt
+    ), "System prompts must be the same for both knowledge and skills"
 
     if not os.path.exists(output_dir):
         os.mkdir(output_dir)
@@ -175,15 +210,10 @@ def generate_data(
 
     name = Path(model_name).stem  # Just in case it is a file path
     date_suffix = datetime.now().replace(microsecond=0).isoformat().replace(":", "_")
-    output_file_train = f"train_{name}_{date_suffix}.jsonl"
+    # output_file_train = f"train_{name}_{date_suffix}.jsonl"
 
     # this file needs to be revisted later - retaining for now
-    output_file_test = f"test_{name}_{date_suffix}.jsonl"
-    
-    #TODO: AB change this to handle new knowledge
-    # taxonomy_ds = get_taxonomy_data(leaf_nodes, sys_prompt=sys_prompt)
-    # logger.info(f"Generating to: {os.path.join(output_dir, output_file_test)}")
-    # taxonomy_ds.to_json(os.path.join(output_dir, output_file_test))
+    # output_file_test = f"test_{name}_{date_suffix}.jsonl"
 
     orig_cert = (tls_client_cert, tls_client_key, tls_client_passwd)
     cert = tuple(item for item in orig_cert if item)
@@ -207,8 +237,8 @@ def generate_data(
         client,
         num_instructions_to_generate,
         num_workers=1,
-        batch_size=1,
-        save_freq=2
+        batch_size=2,
+        save_freq=1,
     )
 
     if console_output:
@@ -216,9 +246,13 @@ def generate_data(
             "Synthesizing new instructions. If you aren't satisfied with the generated instructions, interrupt training (Ctrl-C) and try adjusting your YAML files. Adding more examples may help."
         )
 
+    # flag to check if the leaf node has knowledge data
     is_knowledge = False
-    for i, (leaf_node_path, leaf_node) in enumerate(leaf_nodes.items()):
-        leaf_node_path = '__'.join([f"{idx+1}{e}" for idx, e in enumerate(leaf_node_path.split('->'))])
+
+    for leaf_node_path, leaf_node in leaf_nodes.items():
+        leaf_node_path = "__".join(
+            [f"{idx+1}{e}" for idx, e in enumerate(leaf_node_path.split("->"))]
+        )
         samples = leaf_node_to_samples(leaf_node, server_ctx_size, chunk_word_count)
         ds = Dataset.from_list(samples)
 
@@ -227,48 +261,74 @@ def generate_data(
 
         if samples[0].get("document"):
             sdg = sdg_knowledge
-            logger.info(f"Generating data for leaf node {leaf_node_path} with knowledge pipeline.")
+            logger.info(
+                f"Generating data for leaf node {leaf_node_path} with knowledge pipeline."
+            )
             is_knowledge = True
-            # add to 0.7 recipe
-            # add to 1.0 recipe
 
         elif samples[0].get("seed_context"):
             sdg = sdg_grounded_skill
-            logger.info(f"Generating data for leaf node {leaf_node_path} with grounded skill pipeline.")
-            # add to 1.0 recipe
+            logger.info(
+                f"Generating data for leaf node {leaf_node_path} with grounded skill pipeline."
+            )
 
         else:
             sdg = sdg_freeform_skill
-            logger.info(f"Generating data for leaf node {leaf_node_path} with freeform skill pipeline.")
-            # add to 1.0 recipe
-        
+            logger.info(
+                f"Generating data for leaf node {leaf_node_path} with freeform skill pipeline."
+            )
 
-        generated_data = sdg.generate(ds, checkpoint_dir=os.path.join(output_dir, f"checkpoints_{date_suffix}/{leaf_node_path}"))
+        generated_data = sdg.generate(
+            ds,
+            checkpoint_dir=os.path.join(output_dir, leaf_node_path, "checkpoints"),
+        )
 
         if is_knowledge:
-            knowledge_phase_data = create_phase07_ds(generated_data)
-            skills_phase_data = create_phase10_ds(generated_data)
-            
-            knowledge_fpath = os.path.join(output_dir, f"node_datasets_{date_suffix}/{leaf_node_path}_p07.jsonl")
-            skills_fpath = os.path.join(output_dir, f"node_datasets_{date_suffix}/{leaf_node_path}_p10.jsonl")
+            knowledge_phase_data = create_knowledge_pretraining_ds(generated_data)
+            skills_phase_data = create_knowledge_regular_ds(generated_data)
+
+            knowledge_fpath = os.path.join(
+                output_dir,
+                leaf_node_path,
+                "knowledge_pretraining_generated_data.jsonl",
+            )
+            skills_fpath = os.path.join(
+                output_dir,
+                leaf_node_path,
+                "knowledge_qa_generated_data.jsonl",
+            )
             knowledge_phase_data.to_json(knowledge_fpath, orient="records", lines=True)
             skills_phase_data.to_json(skills_fpath, orient="records", lines=True)
-            
+
             knowledge_recipe.add_dataset(knowledge_fpath)
             skills_recipe.add_dataset(skills_fpath)
 
-            # generate mmlubench data for the current leaf node 
-            mmlubench_data = create_mmlu_evaluation_dataset(sdg_mmlubench.generate(ds))
-            eval_data_file_path=f"{output_dir}/node_datasets_{date_suffix}/mmlubench_{leaf_node_path}.jsonl"
+            # generate mmlubench data for the current leaf node
+            mmlubench_data = create_mmlu_evaluation_dataset(
+                sdg_mmlubench.generate(
+                    ds,
+                    checkpoint_dir=os.path.join(
+                        output_dir, leaf_node_path, "mmlubench_checkpoints"
+                    ),
+                )
+            )
+            eval_data_file_path = os.path.join(
+                output_dir, leaf_node_path, "mmlubench_qa.jsonl"
+            )
+
             logger.info(f"Saving MMLU Dataset {eval_data_file_path}")
-            mmlubench_data.to_json(eval_data_file_path, orient='records', lines=True)
-            yaml_file_path=f"{output_dir}/node_datasets_{date_suffix}/{leaf_node_path}_task.yaml"
-            logger.info(f"Saving MMLU Task yaml {yaml_file_path}")
-            create_mmlu_evaluation_yaml(task_name=leaf_node_path, 
-                                                    eval_data_file_path=eval_data_file_path,
-                                                    yaml_file_path=yaml_file_path)
-           
-            
+            mmlubench_data.to_json(eval_data_file_path, orient="records", lines=True)
+
+            eval_yaml_file_path = os.path.join(
+                output_dir, leaf_node_path, "mmlubench_task.yaml"
+            )
+
+            logger.info(f"Saving MMLU Task yaml {eval_yaml_file_path}")
+            create_mmlu_evaluation_yaml(
+                task_name=leaf_node_path,
+                eval_data_file_path=eval_data_file_path,
+                yaml_file_path=eval_yaml_file_path,
+            )
 
         else:
             messages = generated_data.map(
@@ -277,18 +337,36 @@ def generate_data(
                 num_proc=8,
             )
 
-            fpath = os.path.join(output_dir, f"node_datasets_{date_suffix}/{leaf_node_path}.jsonl")
+            fpath = os.path.join(
+                output_dir,
+                leaf_node_path,
+                "skills_generated_data.jsonl",
+            )
             messages.to_json(fpath, orient="records", lines=True)
             skills_recipe.add_dataset(fpath, NUM_SYNTH_SKILLS)
-    
 
     if knowledge_recipe.dataset_added:
-        knowledge_recipe.save_recipe(f"{output_dir}/knowledge_recipe_{date_suffix}.yaml")
-        knowledge_recipe.save_mixed_dataset(f"{output_dir}/knowledge_train_msgs_{date_suffix}.jsonl")
-        
-                                                                                 
+        knowledge_recipe.save_recipe(
+            os.path.join(
+                output_dir,
+                date_suffix,
+                "knowledge_recipe.yaml",
+            )
+        )
+        knowledge_recipe.save_mixed_dataset(
+            os.path.join(
+                output_dir,
+                date_suffix,
+                "knowledge_train_msgs.jsonl",
+            )
+        )
+
     if skills_recipe.dataset_added:
-        skills_recipe.save_recipe(f"{output_dir}/skills_recipe_{date_suffix}.yaml")
-        skills_recipe.save_mixed_dataset(f"{output_dir}/skills_train_msgs_{date_suffix}.jsonl")
+        skills_recipe.save_recipe(
+            os.path.join(output_dir, date_suffix, "skills_recipe.yaml")
+        )
+        skills_recipe.save_mixed_dataset(
+            os.path.join(output_dir, date_suffix, "skills_train_msgs.jsonl")
+        )
 
     logger.info(f"Generation complete in {time.time() - generate_start:.2f}s")

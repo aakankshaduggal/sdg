@@ -1,5 +1,6 @@
 # Standard
 import json
+import os
 
 # Third Party
 from datasets import Dataset, concatenate_datasets, load_dataset
@@ -53,8 +54,7 @@ def load_ds(path, sampling_size):
     # check if metadata column is string if not convert it using json.dumps
     if not isinstance(dataset["metadata"][0], str):
         dataset = dataset.map(
-            lambda x: {"metadata": json.dumps(x["metadata"])}, 
-            num_proc=8
+            lambda x: {"metadata": json.dumps(x["metadata"])}, num_proc=8
         )
 
     return dataset
@@ -80,34 +80,42 @@ class Recipe:
         self.recipe = self._load_recipe()
         self.sys_prompt = self.recipe.get("sys_prompt", "")
         self.dataset_added = False
-    
+
     def _load_recipe(self):
         with open(self.recipe_path, encoding="utf-8") as fp:
             return yaml.safe_load(fp)
-    
+
     def add_dataset(self, path, sampling_size=1.0):
         self.dataset_added = True
-        self.recipe["datasets"].append({"path": path, 
-                                        "sampling_size": sampling_size})
-    
+        self.recipe["datasets"].append({"path": path, "sampling_size": sampling_size})
+
     def save_recipe(self, output_path):
+        # check if directory exists
+        output_dir = os.path.dirname(output_path)
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+
         with open(output_path, "w", encoding="utf-8") as fp:
             yaml.dump(self.recipe, fp)
 
     def save_mixed_dataset(self, output_path):
         if not self.dataset_added:
             LOGGER.error("No dataset added to the recipe")
-            
-        mixed_ds = [load_ds(dataset["path"], dataset["sampling_size"])
-                    for dataset in self.recipe["datasets"]]
-        
+
+        mixed_ds = [
+            load_ds(dataset["path"], dataset["sampling_size"])
+            for dataset in self.recipe["datasets"]
+        ]
+
         mixed_ds = concatenate_datasets(mixed_ds)
-        mixed_ds = mixed_ds.map(add_system_message, 
-                                fn_kwargs={"sys_prompt": self.sys_prompt}, 
-                                num_proc=8)
+        mixed_ds = mixed_ds.map(
+            add_system_message, fn_kwargs={"sys_prompt": self.sys_prompt}, num_proc=8
+        )
 
         # assert that the dataset only has the allowed columns
-        assert set(mixed_ds.column_names) == set(ALLOWED_COLS), "Dataset has invalid columns"
+        assert set(mixed_ds.column_names) == set(
+            ALLOWED_COLS
+        ), "Dataset has invalid columns"
 
         mixed_ds.to_json(output_path, orient="records", lines=True)
         LOGGER.info(f"Mixed Dataset saved to {output_path}")
