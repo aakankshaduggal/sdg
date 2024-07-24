@@ -20,8 +20,12 @@ def adjust_train_sample_size(ds: Dataset, num_samples: int):
 
 
 def load_ds(path, sampling_size):
-    LOGGER.info(f"Loading dataset from {path} ...")
-    dataset = load_dataset("json", data_files=path, split="train")
+    if path.endswith(".jsonl"):
+        LOGGER.info(f"Loading dataset from {path} ...")
+        dataset = load_dataset("json", data_files=path, split="train")
+    else: 
+        LOGGER.info(f"Loading dataset from HF {path} ...")
+        dataset = load_dataset(path, split="train")
     LOGGER.info(f"Dataset columns: {dataset.column_names}")
     LOGGER.info(f"Dataset loaded with {len(dataset)} samples")
 
