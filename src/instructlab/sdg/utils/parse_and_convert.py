@@ -112,14 +112,15 @@ def create_auxiliary_dataset(generated_dataset: Dataset):
 
     if "dataset_type" not in generated_dataset.column_names:
         return None
-    if os.path.isfile("src/instructlab/sdg/config/kowledge/auxilary_instructions.yaml"):
-        with open("src/instructlab/sdg/config/kowledge/auxilary_instructions.yaml", "r") as fp:
+    if os.path.isfile("src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml"):
+        with open("src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml", "r") as fp:
             auxiliary_inst = yaml.safe_load(fp)
     else:
         return None
     auxiliary_ds = generated_dataset.filter(lambda x: x["dataset_type"] != "base_document")
     unique_document_auxiliary = auxiliary_ds.to_pandas().drop_duplicates(subset=["document"])
-    unique_document_auxiliary = Dataset.from_pandas(unique_document_auxiliary).remove_columns(
+    unique_document_auxiliary = Dataset.from_pandas(unique_document_auxiliary)
+    unique_document_auxiliary = unique_document_auxiliary.remove_columns(
         [col for col in unique_document_auxiliary.column_names if col not in ['raw_document', 'document_outline', 'domain', 'dataset_type', 'document']])
     print(unique_document_auxiliary)
     unique_document_auxiliary = unique_document_auxiliary.rename_columns({"raw_document": "context", "document": "response"})
@@ -169,17 +170,20 @@ def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
     all_context = list(set(ds["context"]))
 
     def __pick_documents(rec, p):
-        while True:
-            selected_idx = random.sample(range(len(all_context)), num_doc_in_context)
-            selected_docs = [all_context[idx] for idx in selected_idx]
-            if rec['context'] not in selected_docs:
-                break
-        if random.uniform(0, 1) < p:
-            docs = [selected_doc_[:random.randint(100, 500)] for selected_doc_ in selected_docs[:num_doc_in_context-1]] + [rec["context"]]
-            # rec['indicator'] ='golden'
+        answer_document = [rec["context"]]
+        selected_docs = [e for e in all_context if e != answer_document]
+        if len(selected_docs) > 0:
+            if len(selected_docs) < num_doc_in_context:
+                print(f"Number of unique document is {len(selected_docs)} which is less than {num_doc_in_context}. Using all the documents in the RAFT context")
+            if random.uniform(0, 1) < p:
+                 # golden/answer + distractor documents
+                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs + [answer_document]
+            else:
+                # distractor documents
+                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs
         else:
-            docs = [selected_doc_[:random.randint(100, 500)] for selected_doc_ in selected_docs] 
-            # rec['indicator'] = 'distractor'
+            print("Only 1 unique document found. Turning off RAFT styling")
+            docs = [answer_document]
         random.shuffle(docs)
         docs = "\n".join(([f"Document:\n{e}\n\n" for idx, e in enumerate(docs)]))
         user_idx, user_msg = [(idx, rec_msg) for idx, rec_msg in enumerate(rec["messages"]) if rec_msg["role"] == "user"][0]
@@ -206,9 +210,13 @@ def create_phase10_ds(generated_dataset: Dataset):
     # Phase 1.0
     knowledge_ds = generate_knowledge_qa_dataset(generated_dataset, keep_context_separate=True)
     knowledge_ds = build_raft_dataset(knowledge_ds, p=0.4)
+    print("Phase 1 ds:", knowledge_ds)
+    print(knowledge_ds[-1]['messages'])
     
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
+        print("Aux dataset :", auxiliary_dataset)
+        print(auxiliary_dataset[-1]['messages'])
         phase10 = concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
         phase10 = knowledge_ds
@@ -219,10 +227,13 @@ def create_phase07_ds(generated_dataset: Dataset):
     # Phase 0.7
     knowledge_ds = generate_knowledge_qa_dataset(generated_dataset, keep_context_separate=False)
     knowledge_ds = knowledge_ds.map(_conv_pretrain)
+    print("Phase 07 ds:", knowledge_ds)
+    print(knowledge_ds[-1]['messages'])
     
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
         auxiliary_dataset = auxiliary_dataset.map(_conv_pretrain)
+        print(auxiliary_dataset[-1]['messages'])
         phase07 = concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
         phase07 = knowledge_ds
