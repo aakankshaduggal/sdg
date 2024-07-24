@@ -2,18 +2,16 @@
 
 # Standard
 from enum import Enum
+from typing import Any
 import json
 import os
 import random
+import re
 import uuid
-
 
 # Third Party
 from datasets import Dataset, concatenate_datasets
 import yaml
-import os
-import re
-from typing import Any
 
 # First Party
 # pylint: disable=ungrouped-imports
@@ -21,6 +19,7 @@ from instructlab.sdg import utils
 from instructlab.sdg.logger_config import setup_logger
 
 logger = setup_logger(__name__)
+
 
 class TaxonomyType(Enum):
     KNOWLEDGE = "knowledge"
@@ -67,7 +66,6 @@ def _get_response(synth_example: dict):
     return parts[1].strip() if len(parts) == 2 else parts[0].strip()
 
 
-
 def _convert_to_hack_fmt(sample: dict, sys_prompt: str):
     """
     Convert a sample dictionary to contain 'system', 'user', and 'assistant' columns.
@@ -91,13 +89,13 @@ def _convert_to_hack_fmt(sample: dict, sys_prompt: str):
 
 def _convert_to_messages(sample: dict, sys_prompt: str):
     """
-    Convert a sample dictionary to contain 'messages' 
+    Convert a sample dictionary to contain 'messages'
     and 'metadata' columns required for training.
     """
     # Create user query message
     user_query = _unescape(_get_question(sample))
     response = _unescape(_get_response(sample))
-    
+
     sample["id"] = str(uuid.uuid4())
     sample["messages"] = [
         {"content": sys_prompt, "role": "system"},
@@ -109,37 +107,65 @@ def _convert_to_messages(sample: dict, sys_prompt: str):
 
 
 def create_auxiliary_dataset(generated_dataset: Dataset):
-
     if "dataset_type" not in generated_dataset.column_names:
         return None
-    if os.path.isfile("src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml"):
-        with open("src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml", "r") as fp:
+    if os.path.isfile(
+        "src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml"
+    ):
+        with open("src/instructlab/sdg/configs/knowledge/auxilary_instructions.yaml", "r", encoding="utf-8") as fp:
             auxiliary_inst = yaml.safe_load(fp)
     else:
         return None
-    auxiliary_ds = generated_dataset.filter(lambda x: x["dataset_type"] != "base_document")
-    unique_document_auxiliary = auxiliary_ds.to_pandas().drop_duplicates(subset=["document"])
+    auxiliary_ds = generated_dataset.filter(
+        lambda x: x["dataset_type"] != "base_document"
+    )
+    unique_document_auxiliary = auxiliary_ds.to_pandas().drop_duplicates(
+        subset=["document"]
+    )
     unique_document_auxiliary = Dataset.from_pandas(unique_document_auxiliary)
     unique_document_auxiliary = unique_document_auxiliary.remove_columns(
-        [col for col in unique_document_auxiliary.column_names if col not in ['raw_document', 'document_outline', 'domain', 'dataset_type', 'document']])
-    print(unique_document_auxiliary)
-    unique_document_auxiliary = unique_document_auxiliary.rename_columns({"raw_document": "context", "document": "response"})
+        [
+            col
+            for col in unique_document_auxiliary.column_names
+            if col
+            not in [
+                "raw_document",
+                "document_outline",
+                "domain",
+                "dataset_type",
+                "document",
+            ]
+        ]
+    )
+    unique_document_auxiliary = unique_document_auxiliary.rename_columns(
+        {"raw_document": "context", "document": "response"}
+    )
+
     def __create_auxiliary_ds(rec):
-        instruction = random.choice(auxiliary_inst[rec['dataset_type']])
-        messages = [{"role": "user", "content": f"{rec['context']}\n\n{instruction}"},
-                    {"role": "assistant", "content": rec["response"]}]
-        metadata = json.dumps({
-            "dataset_type": rec["dataset_type"],
-            "raw_document": rec["context"],
-            "dataset": f"document_{rec['dataset_type']}",
-            "domain": rec["domain"]
-        })
-        return {"messages": messages, "metadata": metadata, "id":  str(uuid.uuid4())}
-    unique_document_auxiliary = unique_document_auxiliary.map(__create_auxiliary_ds, remove_columns=unique_document_auxiliary.column_names)
+        instruction = random.choice(auxiliary_inst[rec["dataset_type"]])
+        messages = [
+            {"role": "user", "content": f"{rec['context']}\n\n{instruction}"},
+            {"role": "assistant", "content": rec["response"]},
+        ]
+        metadata = json.dumps(
+            {
+                "dataset_type": rec["dataset_type"],
+                "raw_document": rec["context"],
+                "dataset": f"document_{rec['dataset_type']}",
+                "domain": rec["domain"],
+            }
+        )
+        return {"messages": messages, "metadata": metadata, "id": str(uuid.uuid4())}
+
+    unique_document_auxiliary = unique_document_auxiliary.map(
+        __create_auxiliary_ds, remove_columns=unique_document_auxiliary.column_names
+    )
     return unique_document_auxiliary
 
 
-def generate_knowledge_qa_dataset(generated_dataset: Dataset, keep_context_separate=False):
+def generate_knowledge_qa_dataset(
+    generated_dataset: Dataset, keep_context_separate=False
+):
     def __create_qa_row(rec):
         context = rec["document"]
         instruction = rec["question"]
@@ -147,23 +173,39 @@ def generate_knowledge_qa_dataset(generated_dataset: Dataset, keep_context_separ
         metadata = {
             "sdg_document": rec["document"],
             "domain": rec["domain"],
-            "dataset": f"document_knowledge_qa"
+            "dataset": "document_knowledge_qa",
         }
         if "raw_document" in rec and "dataset_type" in rec:
-            metadata.update({"raw_document": rec["raw_document"],
-            "dataset_type": rec["dataset_type"],})
+            metadata.update(
+                {
+                    "raw_document": rec["raw_document"],
+                    "dataset_type": rec["dataset_type"],
+                }
+            )
         metadata = json.dumps(metadata)
         if keep_context_separate:
-            messages = [{"role": "user", "content": f"{instruction}"},
-                            {"role": "assistant", "content": response}]
-            return {"messages": messages, "metadata": metadata, "id":  str(uuid.uuid4()), "context": context}
+            messages = [
+                {"role": "user", "content": f"{instruction}"},
+                {"role": "assistant", "content": response},
+            ]
+            return {
+                "messages": messages,
+                "metadata": metadata,
+                "id": str(uuid.uuid4()),
+                "context": context,
+            }
         else:
-            messages = [{"role": "user", "content": f"{context}\n\n{instruction}"},
-                        {"role": "assistant", "content": response}]
-       
-            return {"messages": messages, "metadata": metadata, "id":  str(uuid.uuid4())}
-    knowledge_ds = generated_dataset.map(__create_qa_row, remove_columns=generated_dataset.column_names)
-    return knowledge_ds 
+            messages = [
+                {"role": "user", "content": f"{context}\n\n{instruction}"},
+                {"role": "assistant", "content": response},
+            ]
+
+            return {"messages": messages, "metadata": metadata, "id": str(uuid.uuid4())}
+
+    knowledge_ds = generated_dataset.map(
+        __create_qa_row, remove_columns=generated_dataset.column_names
+    )
+    return knowledge_ds
 
 
 def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
@@ -174,73 +216,90 @@ def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
         selected_docs = [e for e in all_context if e != answer_document]
         if len(selected_docs) > 0:
             if len(selected_docs) < num_doc_in_context:
-                print(f"Number of unique document is {len(selected_docs)} which is less than {num_doc_in_context}. Using all the documents in the RAFT context")
+                logger.info(
+                    f"Number of unique document is {len(selected_docs)} which is less than {num_doc_in_context}. Using all the documents in the RAFT context"
+                )
             if random.uniform(0, 1) < p:
-                 # golden/answer + distractor documents
-                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs + [answer_document]
+                # golden/answer + distractor documents
+                docs = (
+                    random.sample(selected_docs, k=num_doc_in_context)
+                    if len(selected_docs) >= num_doc_in_context
+                    else selected_docs + [answer_document]
+                )
             else:
                 # distractor documents
-                docs = random.sample(selected_docs, k=num_doc_in_context) if len(selected_docs) >= num_doc_in_context else selected_docs
+                docs = (
+                    random.sample(selected_docs, k=num_doc_in_context)
+                    if len(selected_docs) >= num_doc_in_context
+                    else selected_docs
+                )
         else:
-            print("Only 1 unique document found. Turning off RAFT styling")
+            logger.info("Only 1 unique document found. Turning off RAFT styling")
             docs = [answer_document]
+
         random.shuffle(docs)
+
         docs = "\n".join(([f"Document:\n{e}\n\n" for idx, e in enumerate(docs)]))
-        user_idx, user_msg = [(idx, rec_msg) for idx, rec_msg in enumerate(rec["messages"]) if rec_msg["role"] == "user"][0]
+        user_idx, user_msg = [
+            (idx, rec_msg)
+            for idx, rec_msg in enumerate(rec["messages"])
+            if rec_msg["role"] == "user"
+        ][0]
         user_inst = user_msg["content"]
         rec["messages"][user_idx]["content"] = f"{docs}\n\n{user_inst}"
         rec["messages"] = rec["messages"]
-        metadata = json.loads(rec['metadata'])
-        metadata['dataset'] += f"_raft_p{p}"
-        rec['metadata'] = json.dumps(metadata)
+        metadata = json.loads(rec["metadata"])
+        metadata["dataset"] += f"_raft_p{p}"
+        rec["metadata"] = json.dumps(metadata)
+
         return rec
+
     ds = ds.map(__pick_documents, fn_kwargs={"p": p}, remove_columns=["context"])
     return ds
+
 
 def _conv_pretrain(rec):
     rec["messages"] = [
         {
-        "role": "pretraining",
-        "content": f"<|user|>\n{rec['messages'][0]['content']}\n<|assistant|>\n{rec['messages'][1]['content']}"
-    }]
+            "role": "pretraining",
+            "content": f"<|user|>\n{rec['messages'][0]['content']}\n<|assistant|>\n{rec['messages'][1]['content']}",
+        }
+    ]
     return rec
 
 
-def create_phase10_ds(generated_dataset: Dataset):
+def create_knowledge_regular_ds(generated_dataset: Dataset):
     # Phase 1.0
-    knowledge_ds = generate_knowledge_qa_dataset(generated_dataset, keep_context_separate=True)
+    knowledge_ds = generate_knowledge_qa_dataset(
+        generated_dataset, keep_context_separate=True
+    )
     knowledge_ds = build_raft_dataset(knowledge_ds, p=0.4)
-    print("Phase 1 ds:", knowledge_ds)
-    print(knowledge_ds[-1]['messages'])
-    
+
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
-        print("Aux dataset :", auxiliary_dataset)
-        print(auxiliary_dataset[-1]['messages'])
-        phase10 = concatenate_datasets([knowledge_ds, auxiliary_dataset])
+        transformed_data = concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
-        phase10 = knowledge_ds
-    return phase10
+        transformed_data = knowledge_ds
+    return transformed_data
 
 
-def create_phase07_ds(generated_dataset: Dataset):
+def create_knowledge_pretraining_ds(generated_dataset: Dataset):
     # Phase 0.7
-    knowledge_ds = generate_knowledge_qa_dataset(generated_dataset, keep_context_separate=False)
+    knowledge_ds = generate_knowledge_qa_dataset(
+        generated_dataset, keep_context_separate=False
+    )
     knowledge_ds = knowledge_ds.map(_conv_pretrain)
-    print("Phase 07 ds:", knowledge_ds)
-    print(knowledge_ds[-1]['messages'])
-    
+
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
         auxiliary_dataset = auxiliary_dataset.map(_conv_pretrain)
-        print(auxiliary_dataset[-1]['messages'])
-        phase07 = concatenate_datasets([knowledge_ds, auxiliary_dataset])
+        transformed_data = concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
-        phase07 = knowledge_ds
-    return phase07
+        transformed_data = knowledge_ds
+    return transformed_data
 
 
-def post_process_mcq(ds: Dataset, is_mmlu_eval: bool=False) -> Dataset:
+def post_process_mcq(ds: Dataset, is_mmlu_eval: bool = False) -> Dataset:
     """Filters out badly generated data, adds dataset type column
 
     Args:
@@ -262,7 +321,7 @@ def extract_options(text: str) -> list[Any]:
     """regex to extract options from mcq
 
     Args:
-        text (str): question with options/mcq choices 
+        text (str): question with options/mcq choices
 
     Returns:
         list[Any]: options under question that match the pattern.
@@ -282,9 +341,17 @@ def format_mmlu_style(ds: Dataset) -> Dataset:
     Returns:
         Dataset: formated hf dataset
     """
-    ds = ds.map(lambda x: {"answer": x["mmlubench_answer"][: x["mmlubench_answer"].index(")")]})
+    ds = ds.map(
+        lambda x: {"answer": x["mmlubench_answer"][: x["mmlubench_answer"].index(")")]}
+    )
     ds = ds.map(lambda x: {"choices": extract_options(x["mmlubench_question"])})
-    ds = ds.map(lambda x: {"question": x["mmlubench_question"][: x["mmlubench_question"].index("A)")].strip()})
+    ds = ds.map(
+        lambda x: {
+            "question": x["mmlubench_question"][
+                : x["mmlubench_question"].index("A)")
+            ].strip()
+        }
+    )
     ds = ds.rename_columns({"domain": "subject"})
     ds = ds.filter(lambda x: x["choices"])
     ds = ds.filter(lambda x: len(x["choices"]) == 4)
@@ -293,7 +360,7 @@ def format_mmlu_style(ds: Dataset) -> Dataset:
     return ds
 
 
-def create_mmlu_evaluation_dataset(generate_mcq_dataset: Dataset) -> Dataset :
+def create_mmlu_evaluation_dataset(generate_mcq_dataset: Dataset) -> Dataset:
     """Filter, format and return mcq dataset that is compatible with lm-harness for doing mmlu-style evaluation
 
     Args:
@@ -315,5 +382,5 @@ def create_mmlu_evaluation_yaml(task_name, eval_data_file_path, yaml_file_path):
         "include": "_default_mmlu_pr_template_yaml",
         "group": "mmlu_pr",
     }
-    with open(yaml_file_path, "w") as yaml_file:
-                yaml.dump(task_yaml, yaml_file, default_flow_style=False) 
+    with open(yaml_file_path, "w", encoding="utf-8") as yaml_file:
+        yaml.dump(task_yaml, yaml_file, default_flow_style=False)
