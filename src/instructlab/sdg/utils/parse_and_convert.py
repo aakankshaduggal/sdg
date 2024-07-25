@@ -10,13 +10,14 @@ import re
 import uuid
 
 # Third Party
-from datasets import Dataset, concatenate_datasets
+from datasets import Dataset
 import yaml
 
 # First Party
 # pylint: disable=ungrouped-imports
 from instructlab.sdg import utils
 from instructlab.sdg.logger_config import setup_logger
+from .datautils import safe_concatenate_datasets
 
 logger = setup_logger(__name__)
 
@@ -211,7 +212,7 @@ def generate_knowledge_qa_dataset(
 def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
     all_context = list(set(ds["context"]))
 
-    def __pick_documents(rec, p):
+    def _pick_documents(rec, p):
         answer_document = [rec["context"]]
         selected_docs = [e for e in all_context if e != answer_document]
         if len(selected_docs) > 0:
@@ -254,7 +255,7 @@ def build_raft_dataset(ds: Dataset, p, num_doc_in_context=4):
 
         return rec
 
-    ds = ds.map(__pick_documents, fn_kwargs={"p": p}, remove_columns=["context"])
+    ds = ds.map(_pick_documents, fn_kwargs={"p": p}, remove_columns=["context"])
     return ds
 
 
@@ -277,7 +278,7 @@ def create_knowledge_regular_ds(generated_dataset: Dataset):
 
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
-        transformed_data = concatenate_datasets([knowledge_ds, auxiliary_dataset])
+        transformed_data = safe_concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
         transformed_data = knowledge_ds
     return transformed_data
@@ -293,7 +294,7 @@ def create_knowledge_pretraining_ds(generated_dataset: Dataset):
     auxiliary_dataset = create_auxiliary_dataset(generated_dataset)
     if auxiliary_dataset is not None:
         auxiliary_dataset = auxiliary_dataset.map(_conv_pretrain)
-        transformed_data = concatenate_datasets([knowledge_ds, auxiliary_dataset])
+        transformed_data = safe_concatenate_datasets([knowledge_ds, auxiliary_dataset])
     else:
         transformed_data = knowledge_ds
     return transformed_data

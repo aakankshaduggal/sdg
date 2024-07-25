@@ -3,11 +3,13 @@ import json
 import os
 
 # Third Party
-from datasets import Dataset, concatenate_datasets, load_dataset
+from datasets import Dataset, load_dataset
 import yaml
 
 # First Party
 from instructlab.sdg.logger_config import setup_logger
+from .datautils import safe_concatenate_datasets
+
 
 LOGGER = setup_logger(__name__)
 ALLOWED_COLS = ["id", "messages", "metadata"]
@@ -107,7 +109,7 @@ class Recipe:
             for dataset in self.recipe["datasets"]
         ]
 
-        mixed_ds = concatenate_datasets(mixed_ds)
+        mixed_ds = safe_concatenate_datasets(mixed_ds)
         mixed_ds = mixed_ds.map(
             add_system_message, fn_kwargs={"sys_prompt": self.sys_prompt}, num_proc=8
         )
