@@ -17,6 +17,7 @@ openai_api_base = "Add model endpoint here"
 client = OpenAI(
     api_key=openai_api_key,
     base_url=openai_api_base,
+    timeout=3600
 )
 
 models = client.models.list()
